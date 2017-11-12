@@ -42,6 +42,8 @@ func main() {
 				fn = fmtGo
 			case ".js", ".css":
 				fn = fmtJS
+			case ".sass":
+				fn = fmtSASS
 			}
 			if fn != nil {
 				reformat(event.ID, event.Name, fn)
@@ -70,6 +72,21 @@ func fmtJS(name string) ([]byte, error) {
 		"--single-quote",
 		"--no-color",
 		"--trailing-comma", "es5",
+		name).CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("%s: %v\n%s", name, err, new)
+	}
+	return new, nil
+}
+
+func fmtSASS(name string) ([]byte, error) {
+	new, err := exec.Command(
+		"prettier",
+		"--use-tabs",
+		"--single-quote",
+		"--no-color",
+		"--trailing-comma", "es5",
+		"--parser", "scss",
 		name).CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("%s: %v\n%s", name, err, new)
