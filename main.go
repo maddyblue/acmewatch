@@ -12,6 +12,7 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"os"
@@ -39,7 +40,8 @@ func main() {
 			var fn fmtFn
 			switch filepath.Ext(event.Name) {
 			case ".go":
-				fn = fmtGo
+				//fn = fmtGoImports
+				fn = fmtCrlfmt
 			case ".js", ".css":
 				fn = fmtJS
 			}
@@ -52,7 +54,41 @@ func main() {
 
 type fmtFn func(name string) (new []byte, err error)
 
-func fmtGo(name string) ([]byte, error) {
+func fmtCrlfmt(name string) ([]byte, error) {
+	old, err := ioutil.ReadFile(name)
+	if err != nil {
+		return nil, err
+	}
+
+	dir, err := ioutil.TempDir("", "acmego-crlfmt")
+	if err != nil {
+		return nil, err
+	}
+	defer os.RemoveAll(dir)
+	path := filepath.Join(dir, filepath.Base(name))
+	f, err := os.Create(path)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := io.Copy(f, bytes.NewReader(old)); err != nil {
+		return nil, err
+	}
+	f.Close()
+
+	output, err := exec.Command("crlfmt", "-tab", "2", "-w", path).CombinedOutput()
+	if err != nil {
+		if strings.Contains(string(output), "fatal error") {
+			return nil, fmt.Errorf("goimports %s: %v\n%s", name, err, output)
+		}
+		return nil, fmt.Errorf("%s", output)
+	}
+	if output == nil {
+		return nil, nil
+	}
+	return ioutil.ReadFile(path)
+}
+
+func fmtGoImports(name string) ([]byte, error) {
 	new, err := exec.Command("goimports", name).CombinedOutput()
 	if err != nil {
 		if strings.Contains(string(new), "fatal error") {
@@ -96,7 +132,7 @@ func reformat(id int, name string, fn fmtFn) {
 		return
 	}
 
-	if bytes.Equal(old, new) {
+	if new == nil || bytes.Equal(old, new) {
 		return
 	}
 
