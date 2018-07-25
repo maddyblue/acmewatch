@@ -12,7 +12,6 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"log"
 	"os"
@@ -55,37 +54,21 @@ func main() {
 type fmtFn func(name string) (new []byte, err error)
 
 func fmtCrlfmt(name string) ([]byte, error) {
-	old, err := ioutil.ReadFile(name)
+	f, err := os.Open(name)
 	if err != nil {
 		return nil, err
 	}
-
-	dir, err := ioutil.TempDir("", "acmego-crlfmt")
+	defer f.Close()
+	cmd := exec.Command("crlfmt", "-tab", "2")
+	cmd.Stdin = f
+	new, err := cmd.CombinedOutput()
 	if err != nil {
-		return nil, err
-	}
-	defer os.RemoveAll(dir)
-	path := filepath.Join(dir, filepath.Base(name))
-	f, err := os.Create(path)
-	if err != nil {
-		return nil, err
-	}
-	if _, err := io.Copy(f, bytes.NewReader(old)); err != nil {
-		return nil, err
-	}
-	f.Close()
-
-	output, err := exec.Command("crlfmt", "-tab", "2", "-w", path).CombinedOutput()
-	if err != nil {
-		if strings.Contains(string(output), "fatal error") {
-			return nil, fmt.Errorf("goimports %s: %v\n%s", name, err, output)
+		if strings.Contains(string(new), "fatal error") {
+			return nil, fmt.Errorf("goimports %s: %v\n%s", name, err, new)
 		}
-		return nil, fmt.Errorf("%s", output)
+		return nil, fmt.Errorf("%s", new)
 	}
-	if output == nil {
-		return nil, nil
-	}
-	return ioutil.ReadFile(path)
+	return new, nil
 }
 
 func fmtGoImports(name string) ([]byte, error) {
