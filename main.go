@@ -41,7 +41,7 @@ func main() {
 			case ".go":
 				//fn = fmtGoImports
 				fn = fmtCrlfmt
-			case ".js", ".css", ".html", ".json", ".less", ".ts":
+			case ".js", ".css", ".html", ".json", ".less", ".ts", ".tsx":
 				fn = fmtJS
 			}
 			if fn != nil {
