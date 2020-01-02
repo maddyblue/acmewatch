@@ -61,7 +61,7 @@ func fmtSQL(name string) ([]byte, error) {
 		return nil, err
 	}
 	defer f.Close()
-	cmd := exec.Command("cockroach", "sqlfmt", "--print-width", "80")
+	cmd := exec.Command("sqlfmt", "--print-width", "80")
 	cmd.Stdin = f
 	new, err := cmd.CombinedOutput()
 	if err != nil {
