@@ -43,6 +43,8 @@ func main() {
 				fn = fmtCrlfmt
 			case ".js", ".css", ".html", ".json", ".less", ".ts", ".tsx":
 				fn = fmtJS
+			case ".sql":
+				fn = fmtSQL
 			}
 			if fn != nil {
 				reformat(event.ID, event.Name, fn)
@@ -52,6 +54,24 @@ func main() {
 }
 
 type fmtFn func(name string) (new []byte, err error)
+
+func fmtSQL(name string) ([]byte, error) {
+	f, err := os.Open(name)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	cmd := exec.Command("cockroach", "sqlfmt", "--print-width", "80")
+	cmd.Stdin = f
+	new, err := cmd.CombinedOutput()
+	if err != nil {
+		if strings.Contains(string(new), "fatal error") {
+			return nil, fmt.Errorf("sqlfmt %s: %v\n%s", name, err, new)
+		}
+		return nil, fmt.Errorf("%s", new)
+	}
+	return new, nil
+}
 
 func fmtCrlfmt(name string) ([]byte, error) {
 	f, err := os.Open(name)
@@ -64,7 +84,7 @@ func fmtCrlfmt(name string) ([]byte, error) {
 	new, err := cmd.CombinedOutput()
 	if err != nil {
 		if strings.Contains(string(new), "fatal error") {
-			return nil, fmt.Errorf("goimports %s: %v\n%s", name, err, new)
+			return nil, fmt.Errorf("crlfmt %s: %v\n%s", name, err, new)
 		}
 		return nil, fmt.Errorf("%s", new)
 	}
