@@ -45,6 +45,8 @@ func main() {
 				fn = fmtJS
 			case ".sql":
 				fn = fmtSQL
+			case ".rs":
+				fn = fmtRust
 			}
 			if fn != nil {
 				reformat(event.ID, event.Name, fn)
@@ -85,6 +87,24 @@ func fmtCrlfmt(name string) ([]byte, error) {
 	if err != nil {
 		if strings.Contains(string(new), "fatal error") {
 			return nil, fmt.Errorf("crlfmt %s: %v\n%s", name, err, new)
+		}
+		return nil, fmt.Errorf("%s", new)
+	}
+	return new, nil
+}
+
+func fmtRust(name string) ([]byte, error) {
+	f, err := os.Open(name)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	cmd := exec.Command("rustfmt", "--config", "hard_tabs=true")
+	cmd.Stdin = f
+	new, err := cmd.CombinedOutput()
+	if err != nil {
+		if strings.Contains(string(new), "fatal error") {
+			return nil, fmt.Errorf("rustfmt %s: %v\n%s", name, err, new)
 		}
 		return nil, fmt.Errorf("%s", new)
 	}
