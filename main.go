@@ -45,8 +45,10 @@ func main() {
 				fn = fmtJS
 			case ".sql":
 				fn = fmtSQL
-			case ".rs":
-				fn = fmtRust
+			//case ".rs":
+			//fn = fmtRust
+			case ".opt":
+				fn = fmtOpt
 			}
 			if fn != nil {
 				reformat(event.ID, event.Name, fn)
@@ -100,6 +102,24 @@ func fmtRust(name string) ([]byte, error) {
 	}
 	defer f.Close()
 	cmd := exec.Command("rustfmt", "--config", "hard_tabs=true", "--edition", "2018")
+	cmd.Stdin = f
+	new, err := cmd.CombinedOutput()
+	if err != nil {
+		if strings.Contains(string(new), "fatal error") {
+			return nil, fmt.Errorf("rustfmt %s: %v\n%s", name, err, new)
+		}
+		return nil, fmt.Errorf("%s", new)
+	}
+	return new, nil
+}
+
+func fmtOpt(name string) ([]byte, error) {
+	f, err := os.Open(name)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	cmd := exec.Command("optfmt")
 	cmd.Stdin = f
 	new, err := cmd.CombinedOutput()
 	if err != nil {
