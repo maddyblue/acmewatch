@@ -45,8 +45,8 @@ func main() {
 				fn = fmtJS
 			case ".sql":
 				fn = fmtSQL
-			//case ".rs":
-			//fn = fmtRust
+			case ".rs":
+				fn = fmtRust
 			case ".opt":
 				fn = fmtOpt
 			}
@@ -101,7 +101,7 @@ func fmtRust(name string) ([]byte, error) {
 		return nil, err
 	}
 	defer f.Close()
-	cmd := exec.Command("rustfmt", "--config", "hard_tabs=true", "--edition", "2018")
+	cmd := exec.Command("rustfmt", "--edition", "2018")
 	cmd.Stdin = f
 	new, err := cmd.CombinedOutput()
 	if err != nil {
