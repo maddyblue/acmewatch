@@ -19,8 +19,11 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"9fans.net/go/acme"
+	"github.com/adrg/xdg"
+	toml "github.com/pelletier/go-toml"
 )
 
 func main() {
@@ -30,133 +33,108 @@ func main() {
 		log.Fatal(err)
 	}
 
+	configPath, err := xdg.ConfigFile("acmewatch.toml")
+	if err != nil {
+		log.Fatal(err)
+	}
+	var lastMod time.Time
+	var config Config
+
+	readEvent := func(id int, name string) error {
+		info, err := os.Stat(configPath)
+		if err != nil {
+			return err
+		}
+		mod := info.ModTime()
+		if mod.After(lastMod) {
+			f, err := os.Open(configPath)
+			if err != nil {
+				return err
+			}
+			defer f.Close()
+			if err := toml.NewDecoder(f).Decode(&config); err != nil {
+				return err
+			}
+			for _, fm := range config.Formatter {
+				for i, m := range fm.Match {
+					if strings.HasPrefix(m, ".") && !strings.Contains(m, "*") {
+						fm.Match[i] = "*" + m
+					}
+				}
+			}
+			lastMod = mod
+			fmt.Printf("read %s at %s\n", configPath, lastMod)
+		}
+
+		for _, fm := range config.Formatter {
+			for _, m := range fm.Match {
+				matchName := name
+				if strings.HasPrefix(m, "*.") {
+					matchName = filepath.Base(matchName)
+				}
+				matched, err := filepath.Match(m, matchName)
+				if err != nil {
+					return err
+				}
+				if !matched {
+					continue
+				}
+
+				stdin := true
+				args := fm.Args
+				for i, arg := range args {
+					if arg == "$name" {
+						newArgs := make([]string, len(args))
+						copy(newArgs, args)
+						newArgs[i] = name
+						args = newArgs
+						stdin = false
+					}
+				}
+				cmd := exec.Command(fm.Cmd, args...)
+				if stdin {
+					f, err := os.Open(name)
+					if err != nil {
+						return err
+					}
+					defer f.Close()
+					cmd.Stdin = f
+				}
+				out, err := cmd.CombinedOutput()
+				if err != nil {
+					return fmt.Errorf("%s: %s", err, string(out))
+				}
+				reformat(id, name, out)
+				return nil
+			}
+		}
+
+		return nil
+	}
+
 	for {
 		event, err := l.Read()
 		if err != nil {
 			log.Fatal(err)
 		}
-		if event.Name != "" && event.Op == "put" {
-			var fn fmtFn
-			switch filepath.Ext(event.Name) {
-			case ".go":
-				//fn = fmtGoImports
-				fn = fmtCrlfmt
-			case ".js", ".css", ".html", ".json", ".less", ".ts", ".tsx":
-				fn = fmtJS
-			case ".sql":
-				fn = fmtSQL
-			case ".rs":
-				fn = fmtRust
-			case ".opt":
-				fn = fmtOpt
-			}
-			if fn != nil {
-				reformat(event.ID, event.Name, fn)
-			}
+		if event.Name == "" || event.Op != "put" {
+			continue
+		}
+		if err := readEvent(event.ID, event.Name); err != nil {
+			fmt.Printf("%s: %s\n", event.Name, err)
 		}
 	}
 }
 
-type fmtFn func(name string) (new []byte, err error)
-
-func fmtSQL(name string) ([]byte, error) {
-	f, err := os.Open(name)
-	if err != nil {
-		return nil, err
+type Config struct {
+	Formatter []struct {
+		Match []string
+		Cmd   string
+		Args  []string
 	}
-	defer f.Close()
-	cmd := exec.Command("sqlfmt", "--print-width", "80")
-	cmd.Stdin = f
-	new, err := cmd.CombinedOutput()
-	if err != nil {
-		if strings.Contains(string(new), "fatal error") {
-			return nil, fmt.Errorf("sqlfmt %s: %v\n%s", name, err, new)
-		}
-		return nil, fmt.Errorf("%s", new)
-	}
-	return new, nil
 }
 
-func fmtCrlfmt(name string) ([]byte, error) {
-	f, err := os.Open(name)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-	cmd := exec.Command("crlfmt", "-tab", "2")
-	cmd.Stdin = f
-	new, err := cmd.CombinedOutput()
-	if err != nil {
-		if strings.Contains(string(new), "fatal error") {
-			return nil, fmt.Errorf("crlfmt %s: %v\n%s", name, err, new)
-		}
-		return nil, fmt.Errorf("%s", new)
-	}
-	return new, nil
-}
-
-func fmtRust(name string) ([]byte, error) {
-	f, err := os.Open(name)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-	cmd := exec.Command("rustfmt", "--edition", "2018")
-	cmd.Stdin = f
-	new, err := cmd.CombinedOutput()
-	if err != nil {
-		if strings.Contains(string(new), "fatal error") {
-			return nil, fmt.Errorf("rustfmt %s: %v\n%s", name, err, new)
-		}
-		return nil, fmt.Errorf("%s", new)
-	}
-	return new, nil
-}
-
-func fmtOpt(name string) ([]byte, error) {
-	f, err := os.Open(name)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-	cmd := exec.Command("optfmt")
-	cmd.Stdin = f
-	new, err := cmd.CombinedOutput()
-	if err != nil {
-		if strings.Contains(string(new), "fatal error") {
-			return nil, fmt.Errorf("rustfmt %s: %v\n%s", name, err, new)
-		}
-		return nil, fmt.Errorf("%s", new)
-	}
-	return new, nil
-}
-
-func fmtGoImports(name string) ([]byte, error) {
-	new, err := exec.Command("goimports", name).CombinedOutput()
-	if err != nil {
-		if strings.Contains(string(new), "fatal error") {
-			return nil, fmt.Errorf("goimports %s: %v\n%s", name, err, new)
-		}
-		return nil, fmt.Errorf("%s", new)
-	}
-	return new, nil
-}
-
-func fmtJS(name string) ([]byte, error) {
-	new, err := exec.Command(
-		"prettier",
-		"--use-tabs",
-		"--single-quote",
-		"--no-color",
-		"--trailing-comma", "es5",
-		name).CombinedOutput()
-	if err != nil {
-		return nil, fmt.Errorf("%s: %v\n%s", name, err, new)
-	}
-	return new, nil
-}
-
-func reformat(id int, name string, fn fmtFn) {
+func reformat(id int, name string, new []byte) {
 	w, err := acme.Open(id, nil)
 	if err != nil {
 		log.Print(err)
@@ -167,11 +145,6 @@ func reformat(id int, name string, fn fmtFn) {
 	old, err := ioutil.ReadFile(name)
 	if err != nil {
 		//log.Print(err)
-		return
-	}
-	new, err := fn(name)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
 		return
 	}
 
