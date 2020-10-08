@@ -36,5 +36,5 @@ args = ["--edition", "2018"]
 [[formatter]]
 match = [".js", ".jsx", ".tsx", ".ts", ".css", ".html", ".less"]
 cmd = "prettier"
-args = ["--use-tabs", "--single-quote", "$name"]
+args = ["--config-precedence",  "file-override", "--use-tabs", "--single-quote", "$name"]
 ```
