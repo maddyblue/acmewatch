@@ -41,5 +41,5 @@ args = ["--config-precedence",  "file-override", "--use-tabs", "--single-quote",
 [[formatter]]
 match = [".py"]
 cmd = "black"
-args = ["-"]
+args = ["-", "-q"]
 ```
