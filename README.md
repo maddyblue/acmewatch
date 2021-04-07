@@ -37,4 +37,9 @@ args = ["--edition", "2018"]
 match = [".js", ".jsx", ".tsx", ".ts", ".css", ".html", ".less"]
 cmd = "prettier"
 args = ["--config-precedence",  "file-override", "--use-tabs", "--single-quote", "$name"]
+
+[[formatter]]
+match = [".py"]
+cmd = "black"
+args = ["-"]
 ```
