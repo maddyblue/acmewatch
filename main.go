@@ -92,6 +92,7 @@ func main() {
 					}
 				}
 				cmd := exec.Command(fm.Cmd, args...)
+				cmd.Dir = filepath.Dir(name)
 				if stdin {
 					f, err := os.Open(name)
 					if err != nil {
